@@ -1,0 +1,91 @@
+```mermaid
+flowchart TD
+    subgraph ClientConnection [WebSocket Connection]
+        direction LR
+        WS_IN[WebSocket In] --> MainLoop
+        MainLoop --> WS_OUT[WebSocket Out]
+    end
+
+    subgraph MainAsyncioLoop [Main Asyncio Loop]
+        direction TB
+        MainLoop(Handle WebSocket & Async Tasks)
+        MainLoop -- route_message --> HandleText{handleTextMessage}
+        MainLoop -- route_message --> HandleAudio{handleAudioMessage}
+
+        HandleText -- chat/chat_fc --> SubmitTTS[Submit speak_and_play to Executor]
+        HandleText -- function_call --> SubmitMCPTool[Submit mcp_manager.execute_tool]
+        HandleText -- memory_query --> SubmitMemory[Submit memory.query_memory]
+
+
+        SubmitTTS --> TTSQueue[(tts_queue)]
+        SubmitMCPTool --> MCPManagerInterface[MCP Manager Interface]
+        SubmitMemory --> MemoryInterface[Memory Interface]
+
+
+        MainLoop -- run_coroutine_threadsafe --> SendAudio[sendAudioMessage]
+        SendAudio --> WS_OUT
+
+        MainLoop -- run_coroutine_threadsafe --> MCPManagerInterface
+        MCPManagerInterface -- async calls --> MCPServers([MCP Tool Servers])
+
+        MainLoop -- run_coroutine_threadsafe --> MemoryInterface
+        MemoryInterface -- async calls --> MemoryModule[Memory Module]
+
+    end
+
+
+    subgraph ThreadPool [ThreadPoolExecutor]
+        direction TB
+        Executor("Worker Threads - Max 10")
+        Executor -- run --> SpeakPlay["speak_and_play (TTS - Blocking)"]
+        Executor -- run --> InitComponents["_initialize_components"]
+        Executor -- run --> OtherBlockingTasks[...]
+    end
+
+    subgraph TTSProcessing [TTS Priority Thread]
+        direction TB
+        TTSThread("Wait for TTS Future & Encode Opus")
+        TTSQueue -- get Future --> TTSThread
+        SpeakPlay -- Future.result() --> TTSThread
+        TTSThread -- tts.audio_to_opus_data --> EncodeOpus{Encode Opus}
+        EncodeOpus --> AudioQueue[(audio_play_queue)]
+    end
+
+    subgraph AudioPlayback [Audio Play Priority Thread]
+        direction TB
+        AudioThread("Get Opus & Submit Send Task")
+        AudioQueue -- get Opus --> AudioThread
+        AudioThread -- run_coroutine_threadsafe --> MainLoop
+    end
+
+    %% Connections
+    ClientConnection -- Creates --> ConnectionHandlerInstance(ConnectionHandler Instance)
+
+    ConnectionHandlerInstance -- Manages --> MainAsyncioLoop
+    ConnectionHandlerInstance -- Manages --> ThreadPool
+    ConnectionHandlerInstance -- Creates/Manages --> TTSProcessing
+    ConnectionHandlerInstance -- Creates/Manages --> AudioPlayback
+
+    SubmitTTS -- Submits Future --> TTSQueue
+    SpeakPlay -- Completes Future for --> TTSThread
+
+    TTSThread -- Puts Opus Data --> AudioQueue
+    AudioThread -- Gets Opus Data --> AudioQueue
+    AudioThread -- Submits send task --> MainLoop
+
+    MainLoop -- Submits Task --> Executor
+    Executor -- Runs --> SpeakPlay
+
+
+    %% Style
+    classDef queue fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef thread fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef loop fill:#ccf,stroke:#333,stroke-width:2px;
+    classDef process fill:#ff9,stroke:#333,stroke-width:2px;
+
+    class TTSQueue,AudioQueue queue;
+    class TTSThread,AudioThread thread;
+    class Executor thread;
+    class MainLoop loop;
+    class MCPServers process;
+```
