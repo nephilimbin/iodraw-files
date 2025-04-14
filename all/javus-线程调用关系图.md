@@ -20,8 +20,8 @@ graph TD
         J --> K(加载私有配置);
         K --> L{启动 TTS 优先级线程};
         K --> M{启动音频播放优先级线程};
-        L --> L_Thread(TTS Thread);
-        M --> M_Thread(Audio Playback Thread);
+        L --> L_Thread
+        M --> M_Thread
         K --> N(进入消息监听循环 async for);
         N -- 文本消息 --> O{"路由消息 _route_message (async)"};
         N -- 音频消息 --> O;
@@ -38,8 +38,8 @@ graph TD
     subgraph ThreadingAsyncExecution ["Threading & Async Execution (core/connection.py, concurrent.futures)"]
         direction LR
         Executor[ThreadPoolExecutor]
-        L_Thread -- 添加任务 --> TTS_Queue[(TTS Queue)];
-        M_Thread -- 添加任务 --> Audio_Queue[(Audio Playback Queue)];
+        L_Thread -- 添加任务 --> TTS_Queue[(TTS Queue)]
+        M_Thread -- 添加任务 --> Audio_Queue[(Audio Playback Queue)]
 
         subgraph TTSThread ["TTS Thread (threading.Thread in core/connection.py)"]
              direction TB
@@ -53,7 +53,7 @@ graph TD
              Audio_Process -- 需要主循环操作 --> RunAudioAsync(run_coroutine_threadsafe);
         end
 
-        R -- 运行阻塞代码 --> Executor;
+        R -- 运行阻塞代码 --> Executor
         Executor -- 完成 --> RunExecAsync(run_coroutine_threadsafe);
     end
 
@@ -76,16 +76,9 @@ graph TD
         B -- 执行协程 --> V(WebSocket 发送/状态更新等);
     end
 
-    %% --- Connections between Subgraphs/Components ---
-    L --> ThreadingAsyncExecution; %% TTS Thread start links to the threading subgraph
-    M --> ThreadingAsyncExecution; %% Audio Thread start links to the threading subgraph
-    P --> PluginFunctions;         %% Text message handling calls plugins
-    Q --> PluginFunctions;         %% Audio message handling calls plugins
-    R --> ThreadingAsyncExecution; %% Plugin execution (potentially) uses Executor
-
     %% --- Styling (Optional) ---
     classDef thread fill:#f9f,stroke:#333,stroke-width:2px;
     classDef executor fill:#ccf,stroke:#333,stroke-width:2px;
-    class L_Thread,M_Thread,TTSThread,AudioPlaybackThread thread;
+    class L_Thread,M_Thread,TTSThread,AudioPlaybackThread thread
     class Executor executor;
 ```
