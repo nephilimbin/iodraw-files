@@ -2,7 +2,7 @@
 graph TD
     subgraph Main Application [app.py]
         direction LR
-        A[启动 main()] --> B(创建 asyncio 事件循环);
+        A["启动 main()"] --> B(创建 asyncio 事件循环);
         B --> C{启动 WebSocket 服务器任务};
         B --> D{监听退出信号};
         C --> E[等待连接];
@@ -13,7 +13,7 @@ graph TD
     subgraph Connection Handler [core/connection.py per connection]
         direction TB
         E --> H{接受 WebSocket 连接};
-        H --> I{认证 Authenticate (async)};
+        H --> I{"认证 Authenticate (async)"};
         I --> J(发送欢迎消息);
         J --> K(加载私有配置);
         K --> L{启动 TTS 优先级线程};
@@ -21,14 +21,14 @@ graph TD
         L --> L_Thread(TTS Thread);
         M --> M_Thread(Audio Playback Thread);
         K --> N(进入消息监听循环 async for);
-        N -- 文本消息 --> O{路由消息 _route_message (async)};
+        N -- 文本消息 --> O{"路由消息 _route_message (async)"};
         N -- 音频消息 --> O;
-        O --> P[处理文本 handleTextMessage (async)];
-        O --> Q[处理音频 handleAudioMessage (async)];
-        P --> R{调用插件/功能 (可能在 Executor 中运行)};
+        O --> P["处理文本 handleTextMessage (async)"];
+        O --> Q["处理音频 handleAudioMessage (async)"];
+        P --> R{"调用插件/功能 (可能在 Executor 中运行)"};
         Q --> R;
         R --> S{执行阻塞/IO 操作};
-        N -- 连接关闭 --> T{保存状态并关闭 (async)};
+        N -- 连接关闭 --> T{"保存状态并关闭 (async)"};
         T --> U(关闭连接);
     end
 
@@ -58,7 +58,7 @@ graph TD
     subgraph Plugin Functions [plugins_func/functions]
         direction LR
         PluginAsync[Async Plugin Functions]
-        PluginSync[Sync Plugin Functions (run in Executor)]
+        PluginSync["Sync Plugin Functions (run in Executor)"]
         PluginAsync -- 可能调用 --> RunPluginAsync(run_coroutine_threadsafe);
     end
 
@@ -71,8 +71,7 @@ graph TD
         B -- 执行协程 --> V(WebSocket 发送/状态更新等);
     end
 
-    %% Connections
-    H --> ConnectionHandler;
+    %% Connections within and between subgraphs
     L --> Threading;
     M --> Threading;
     P --> PluginFunctions;
