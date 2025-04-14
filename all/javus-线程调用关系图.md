@@ -14,79 +14,79 @@ graph TD
         D --> E{接受 WebSocket 连接};
         E --> F[创建 WebSocketWrapper];
         F --> G[注入依赖: Authenticator, Router, Dispatcher, StateManager];
-        G --> H{"调用 Authenticator.authenticate()"};  %% Node H label quoted
-        H -- "认证成功" --> I("加载状态 StateManager.load()");
+        G --> H{"调用 Authenticator.authenticate()"} %% 修正: 移除了行尾注释
+        H -- "认证成功" --> I("加载状态 StateManager.load()")
         I --> J(进入消息监听循环 async for);
-        J -- "收到消息" --> K{"调用 Router.route(message)"};
-        K -- "返回 Handler" --> L{"调用 Handler.handle(message, context)"};
-        L -- "正常处理" --> J; %% Edge label quoted
-        J -- "连接关闭/异常" --> M{"保存状态 StateManager.save()"};
-        M --> N(关闭连接 WebSocketWrapper.close());
-        H -- "认证失败" --> N;
+        J -- "收到消息" --> K{"调用 Router.route(message)"}
+        K -- "返回 Handler" --> L{"调用 Handler.handle(message, context)"}
+        L -- "正常处理" --> J
+        J -- "连接关闭/异常" --> M{"保存状态 StateManager.save()"}
+        M --> N(关闭连接 WebSocketWrapper.close())
+        H -- "认证失败" --> N
     end
 
     %% --- Authentication ---
     subgraph Authenticator ["Authenticator (core/auth.py)"]
-       AuthNode["authenticate(headers)"];
+       AuthNode["authenticate(headers)"]
     end
 
     %% --- Message Routing ---
     subgraph Router ["Message Router (core/routing.py)"]
-        RouteNode["route(message) -> MessageHandler"];
+        RouteNode["route(message) -> MessageHandler"]
     end
 
     %% --- Message Handling ---
     subgraph Handlers ["Message Handlers (core/handlers/*)"]
         direction LR
-        HandlerBase["BaseMessageHandler.handle()"];
-        TextHandler["TextMessageHandler"];
-        AudioHandler["AudioMessageHandler"];
+        HandlerBase["BaseMessageHandler.handle()"]
+        TextHandler["TextMessageHandler"]
+        AudioHandler["AudioMessageHandler"]
         %% ... other handlers ...
-        HandlerBase --> TextHandler;
-        HandlerBase --> AudioHandler;
-        TextHandler -- "调用插件/TTS" --> TaskDisp;
-        AudioHandler -- "可能调用" --> TaskDisp;
+        HandlerBase --> TextHandler
+        HandlerBase --> AudioHandler
+        TextHandler -- "调用插件/TTS" --> TaskDisp
+        AudioHandler -- "可能调用" --> TaskDisp
     end
 
     %% --- Task Dispatching ---
     subgraph TaskDispatcher ["Task Dispatcher (core/tasks.py)"]
-        TaskDisp["dispatch_plugin(tool_name, args)"];
-        TaskDisp --> PluginExecQueue("Plugin Executor"); %% Node label quoted, shape ()
-        TaskDisp --> TTSQueue("TTS Queue"); %% Node label quoted, shape ()
-        TaskDisp --> AudioQueue("Audio Playback Queue"); %% Node label quoted, shape ()
+        TaskDisp["dispatch_plugin(tool_name, args)"]
+        TaskDisp --> PluginExecQueue("Plugin Executor")
+        TaskDisp --> TTSQueue("TTS Queue")
+        TaskDisp --> AudioQueue("Audio Playback Queue")
     end
 
     %% --- State Management ---
     subgraph StateManager ["State Manager (core/state.py)"]
-        LoadState["load()"];
-        SaveState["save()"];
+        LoadState["load()"]
+        SaveState["save()"]
     end
 
     %% --- Background Execution (Similar to before, but triggered differently) ---
     subgraph BackgroundExecution ["Threading & Async Execution"]
         direction LR
-        PluginExecQueue -- 任务 --> Executor[ThreadPoolExecutor];
-        TTSQueue -- 任务 --> TTSThread["TTS Thread"];
-        AudioQueue -- 任务 --> AudioThread["Audio Playback Thread"];
+        PluginExecQueue -- 任务 --> Executor[ThreadPoolExecutor]
+        TTSQueue -- 任务 --> TTSThread["TTS Thread"]
+        AudioQueue -- 任务 --> AudioThread["Audio Playback Thread"]
 
-        Executor -- "完成/需交互" --> RunExecAsync(run_coroutine_threadsafe);
-        TTSThread -- "完成/需交互" --> RunTTSAsync(run_coroutine_threadsafe);
-        AudioThread -- "需交互" --> RunAudioAsync(run_coroutine_threadsafe);
+        Executor -- "完成/需交互" --> RunExecAsync(run_coroutine_threadsafe)
+        TTSThread -- "完成/需交互" --> RunTTSAsync(run_coroutine_threadsafe)
+        AudioThread -- "需交互" --> RunAudioAsync(run_coroutine_threadsafe)
 
-        RunExecAsync --> B; %% Interact with main loop
-        RunTTSAsync --> B;
-        RunAudioAsync --> B;
+        RunExecAsync --> B %% Interact with main loop
+        RunTTSAsync --> B
+        RunAudioAsync --> B
     end
 
 
     %% --- Dependencies & Interactions ---
-    G --> Authenticator;
-    G --> Router;
-    G --> TaskDispatcher;
-    G --> StateManager;
+    G --> Authenticator
+    G --> Router
+    G --> TaskDispatcher
+    G --> StateManager
 
-    K --> Router;
-    L --> Handlers;
+    K --> Router
+    L --> Handlers
 
     %% Styling (Optional)
     classDef component fill:#cff,stroke:#333,stroke-width:1px;
