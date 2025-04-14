@@ -15,14 +15,14 @@ graph TD
         E --> F[创建 WebSocketWrapper];
         F --> G[注入依赖: Authenticator, Router, Dispatcher, StateManager];
         G --> H{调用 Authenticator.authenticate()};
-        H -- 认证成功 --> I(加载状态 StateManager.load());
+        H -- "认证成功" --> I("加载状态 StateManager.load()"); %% Edge label quoted, Node label quoted
         I --> J(进入消息监听循环 async for);
-        J -- 收到消息 --> K{调用 Router.route(message)};
-        K -- 返回 Handler --> L{调用 Handler.handle(message, context)};
+        J -- "收到消息" --> K{"调用 Router.route(message)"}; %% Edge label quoted, Node label quoted
+        K -- "返回 Handler" --> L{"调用 Handler.handle(message, context)"}; %% Edge label quoted, Node label quoted
         L -- 正常处理 --> J; %% Loop back for next message
-        J -- 连接关闭/异常 --> M{保存状态 StateManager.save()};
+        J -- "连接关闭/异常" --> M{"保存状态 StateManager.save()"}; %% Edge label quoted, Node label quoted
         M --> N(关闭连接 WebSocketWrapper.close());
-        H -- 认证失败 --> N; %% Auth fail leads to close
+        H -- "认证失败" --> N; %% Edge label quoted
     end
 
     %% --- Authentication ---
@@ -44,16 +44,16 @@ graph TD
         %% ... other handlers ...
         HandlerBase --> TextHandler;
         HandlerBase --> AudioHandler;
-        TextHandler -- 调用插件/TTS --> TaskDisp;
-        AudioHandler -- 可能调用 --> TaskDisp;
+        TextHandler -- "调用插件/TTS" --> TaskDisp; %% Edge label quoted
+        AudioHandler -- "可能调用" --> TaskDisp; %% Edge label quoted
     end
 
     %% --- Task Dispatching ---
     subgraph TaskDispatcher ["Task Dispatcher (core/tasks.py)"]
         TaskDisp["dispatch_plugin(tool_name, args)"];
-        TaskDisp --> PluginExecQueue[(Plugin Executor)];
-        TaskDisp --> TTSQueue[(TTS Queue)];
-        TaskDisp --> AudioQueue[(Audio Playback Queue)];
+        TaskDisp --> PluginExecQueue[("Plugin Executor")]; %% Node label quoted for cylinder
+        TaskDisp --> TTSQueue[("TTS Queue")]; %% Node label quoted for cylinder
+        TaskDisp --> AudioQueue[("Audio Playback Queue")]; %% Node label quoted for cylinder
     end
 
     %% --- State Management ---
@@ -69,9 +69,9 @@ graph TD
         TTSQueue -- 任务 --> TTSThread["TTS Thread"];
         AudioQueue -- 任务 --> AudioThread["Audio Playback Thread"];
 
-        Executor -- 完成/需交互 --> RunExecAsync(run_coroutine_threadsafe);
-        TTSThread -- 完成/需交互 --> RunTTSAsync(run_coroutine_threadsafe);
-        AudioThread -- 需交互 --> RunAudioAsync(run_coroutine_threadsafe);
+        Executor -- "完成/需交互" --> RunExecAsync(run_coroutine_threadsafe); %% Edge label quoted
+        TTSThread -- "完成/需交互" --> RunTTSAsync(run_coroutine_threadsafe); %% Edge label quoted
+        AudioThread -- "需交互" --> RunAudioAsync(run_coroutine_threadsafe); %% Edge label quoted
 
         RunExecAsync --> B; %% Interact with main loop
         RunTTSAsync --> B;
@@ -95,5 +95,4 @@ graph TD
     class ConnectionManager,Authenticator,Router,Handlers,TaskDispatcher,StateManager component;
     class TTSThread,AudioThread thread;
     class PluginExecQueue,TTSQueue,AudioQueue queue;
-
 ```
