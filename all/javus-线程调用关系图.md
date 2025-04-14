@@ -21,7 +21,7 @@ graph TD
         K -- "返回 Handler" --> L{"调用 Handler.handle(message, context)"}
         L -- "正常处理" --> J
         J -- "连接关闭/异常" --> M{"保存状态 StateManager.save()"}
-        M --> N("关闭连接 WebSocketWrapper.close()") %% 修正: Node N label quoted
+        M --> N("关闭连接 WebSocketWrapper.close()") 
         H -- "认证失败" --> N
     end
 
