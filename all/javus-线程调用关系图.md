@@ -73,7 +73,7 @@ graph TD
         TTSThread -- "完成/需交互" --> RunTTSAsync(run_coroutine_threadsafe)
         AudioThread -- "需交互" --> RunAudioAsync(run_coroutine_threadsafe)
 
-        RunExecAsync --> B %% Interact with main loop
+        RunExecAsync --> B
         RunTTSAsync --> B
         RunAudioAsync --> B
     end
