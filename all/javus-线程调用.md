@@ -1,91 +1,88 @@
 ```mermaid
-flowchart TD
-    subgraph ClientConnection [WebSocket Connection]
+graph TD
+    subgraph Main Application [app.py]
         direction LR
-        WS_IN[WebSocket In] --> MainLoop
-        MainLoop --> WS_OUT[WebSocket Out]
+        A[启动 main()] --> B(创建 asyncio 事件循环);
+        B --> C{启动 WebSocket 服务器任务};
+        B --> D{监听退出信号};
+        C --> E[等待连接];
+        D --> F(清理任务);
+        F --> G(停止循环);
     end
 
-    subgraph MainAsyncioLoop [Main Asyncio Loop]
+    subgraph Connection Handler [core/connection.py per connection]
         direction TB
-        MainLoop(Handle WebSocket & Async Tasks)
-        MainLoop -- route_message --> HandleText{handleTextMessage}
-        MainLoop -- route_message --> HandleAudio{handleAudioMessage}
+        E --> H{接受 WebSocket 连接};
+        H --> I{认证 Authenticate (async)};
+        I --> J(发送欢迎消息);
+        J --> K(加载私有配置);
+        K --> L{启动 TTS 优先级线程};
+        K --> M{启动音频播放优先级线程};
+        L --> L_Thread(TTS Thread);
+        M --> M_Thread(Audio Playback Thread);
+        K --> N(进入消息监听循环 async for);
+        N -- 文本消息 --> O{路由消息 _route_message (async)};
+        N -- 音频消息 --> O;
+        O --> P[处理文本 handleTextMessage (async)];
+        O --> Q[处理音频 handleAudioMessage (async)];
+        P --> R{调用插件/功能 (可能在 Executor 中运行)};
+        Q --> R;
+        R --> S{执行阻塞/IO 操作};
+        N -- 连接关闭 --> T{保存状态并关闭 (async)};
+        T --> U(关闭连接);
+    end
 
-        HandleText -- chat/chat_fc --> SubmitTTS[Submit speak_and_play to Executor]
-        HandleText -- function_call --> SubmitMCPTool[Submit mcp_manager.execute_tool]
-        HandleText -- memory_query --> SubmitMemory[Submit memory.query_memory]
+    subgraph Threading & Async Execution
+        direction LR
+        Executor[ThreadPoolExecutor]
+        L_Thread -- 添加任务 --> TTS_Queue[(TTS Queue)];
+        M_Thread -- 添加任务 --> Audio_Queue[(Audio Playback Queue)];
 
+        subgraph TTS Thread [threading.Thread]
+             direction TB
+             TTS_Queue -- 获取任务 --> TTS_Process(处理 TTS);
+             TTS_Process -- 需要主循环操作 --> RunTTSAsync(run_coroutine_threadsafe);
+        end
 
-        SubmitTTS --> TTSQueue[(tts_queue)]
-        SubmitMCPTool --> MCPManagerInterface[MCP Manager Interface]
-        SubmitMemory --> MemoryInterface[Memory Interface]
+        subgraph Audio Playback Thread [threading.Thread]
+             direction TB
+             Audio_Queue -- 获取任务 --> Audio_Process(处理音频播放);
+             Audio_Process -- 需要主循环操作 --> RunAudioAsync(run_coroutine_threadsafe);
+        end
 
-
-        MainLoop -- run_coroutine_threadsafe --> SendAudio[sendAudioMessage]
-        SendAudio --> WS_OUT
-
-        MainLoop -- run_coroutine_threadsafe --> MCPManagerInterface
-        MCPManagerInterface -- async calls --> MCPServers([MCP Tool Servers])
-
-        MainLoop -- run_coroutine_threadsafe --> MemoryInterface
-        MemoryInterface -- async calls --> MemoryModule[Memory Module]
-
+        R -- 运行阻塞代码 --> Executor;
+        Executor -- 完成 --> RunExecAsync(run_coroutine_threadsafe);
     end
 
 
-    subgraph ThreadPool [ThreadPoolExecutor]
-        direction TB
-        Executor("Worker Threads - Max 10")
-        Executor -- run --> SpeakPlay["speak_and_play (TTS - Blocking)"]
-        Executor -- run --> InitComponents["_initialize_components"]
-        Executor -- run --> OtherBlockingTasks[...]
+    subgraph Plugin Functions [plugins_func/functions]
+        direction LR
+        PluginAsync[Async Plugin Functions]
+        PluginSync[Sync Plugin Functions (run in Executor)]
+        PluginAsync -- 可能调用 --> RunPluginAsync(run_coroutine_threadsafe);
     end
 
-    subgraph TTSProcessing [TTS Priority Thread]
+    subgraph Event Loop Interactions
         direction TB
-        TTSThread("Wait for TTS Future & Encode Opus")
-        TTSQueue -- get Future --> TTSThread
-        SpeakPlay -- Future.result() --> TTSThread
-        TTSThread -- tts.audio_to_opus_data --> EncodeOpus{Encode Opus}
-        EncodeOpus --> AudioQueue[(audio_play_queue)]
-    end
-
-    subgraph AudioPlayback [Audio Play Priority Thread]
-        direction TB
-        AudioThread("Get Opus & Submit Send Task")
-        AudioQueue -- get Opus --> AudioThread
-        AudioThread -- run_coroutine_threadsafe --> MainLoop
+        RunTTSAsync --> B;
+        RunAudioAsync --> B;
+        RunExecAsync --> B;
+        RunPluginAsync --> B;
+        B -- 执行协程 --> V(WebSocket 发送/状态更新等);
     end
 
     %% Connections
-    ClientConnection -- Creates --> ConnectionHandlerInstance(ConnectionHandler Instance)
-
-    ConnectionHandlerInstance -- Manages --> MainAsyncioLoop
-    ConnectionHandlerInstance -- Manages --> ThreadPool
-    ConnectionHandlerInstance -- Creates/Manages --> TTSProcessing
-    ConnectionHandlerInstance -- Creates/Manages --> AudioPlayback
-
-    SubmitTTS -- Submits Future --> TTSQueue
-    SpeakPlay -- Completes Future for --> TTSThread
-
-    TTSThread -- Puts Opus Data --> AudioQueue
-    AudioThread -- Gets Opus Data --> AudioQueue
-    AudioThread -- Submits send task --> MainLoop
-
-    MainLoop -- Submits Task --> Executor
-    Executor -- Runs --> SpeakPlay
+    H --> ConnectionHandler;
+    L --> Threading;
+    M --> Threading;
+    P --> PluginFunctions;
+    Q --> PluginFunctions;
+    R --> Threading;
 
 
-    %% Style
-    classDef queue fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef thread fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef loop fill:#ccf,stroke:#333,stroke-width:2px;
-    classDef process fill:#ff9,stroke:#333,stroke-width:2px;
-
-    class TTSQueue,AudioQueue queue;
-    class TTSThread,AudioThread thread;
-    class Executor thread;
-    class MainLoop loop;
-    class MCPServers process;
+    %% Styling (Optional)
+    classDef thread fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef executor fill:#ccf,stroke:#333,stroke-width:2px;
+    class L_Thread,M_Thread,TTS_Thread,Audio_Playback_Thread thread;
+    class Executor executor;
 ```
