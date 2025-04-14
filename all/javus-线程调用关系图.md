@@ -14,7 +14,7 @@ graph TD
         D --> E{接受 WebSocket 连接};
         E --> F[创建 WebSocketWrapper];
         F --> G[注入依赖: Authenticator, Router, Dispatcher, StateManager];
-        G --> H{"调用 Authenticator.authenticate()"} %% 修正: 移除了行尾注释
+        G --> H{"调用 Authenticator.authenticate()"}
         H -- "认证成功" --> I("加载状态 StateManager.load()")
         I --> J(进入消息监听循环 async for);
         J -- "收到消息" --> K{"调用 Router.route(message)"}
