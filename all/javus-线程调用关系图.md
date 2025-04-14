@@ -1,6 +1,7 @@
 ```mermaid
 graph TD
-    subgraph Main Application [app.py]
+    %% --- Main Application Entry Point ---
+    subgraph MainApplication ["Main Application (app.py)"]
         direction LR
         A["启动 main()"] --> B(创建 asyncio 事件循环);
         B --> C{启动 WebSocket 服务器任务};
@@ -10,10 +11,11 @@ graph TD
         F --> G(停止循环);
     end
 
-    subgraph Connection Handler [core/connection.py per connection]
+    %% --- Handling Individual Connections ---
+    subgraph ConnectionHandler ["Connection Handler (core/connection.py per connection)"]
         direction TB
         E --> H{接受 WebSocket 连接};
-        H --> I{"认证 Authenticate (async)"};
+        H --> I{"认证 Authenticate (core/auth.py - async)"};
         I --> J(发送欢迎消息);
         J --> K(加载私有配置);
         K --> L{启动 TTS 优先级线程};
@@ -32,19 +34,20 @@ graph TD
         T --> U(关闭连接);
     end
 
-    subgraph Threading & Async Execution
+    %% --- Threading and Asynchronous Task Execution ---
+    subgraph ThreadingAsyncExecution ["Threading & Async Execution (core/connection.py, concurrent.futures)"]
         direction LR
         Executor[ThreadPoolExecutor]
         L_Thread -- 添加任务 --> TTS_Queue[(TTS Queue)];
         M_Thread -- 添加任务 --> Audio_Queue[(Audio Playback Queue)];
 
-        subgraph TTS Thread [threading.Thread]
+        subgraph TTSThread ["TTS Thread (threading.Thread in core/connection.py)"]
              direction TB
-             TTS_Queue -- 获取任务 --> TTS_Process(处理 TTS);
+             TTS_Queue -- 获取任务 --> TTS_Process["处理 TTS (core/providers/tts/* - async/sync)"];
              TTS_Process -- 需要主循环操作 --> RunTTSAsync(run_coroutine_threadsafe);
         end
 
-        subgraph Audio Playback Thread [threading.Thread]
+        subgraph AudioPlaybackThread ["Audio Playback Thread (threading.Thread in core/connection.py)"]
              direction TB
              Audio_Queue -- 获取任务 --> Audio_Process(处理音频播放);
              Audio_Process -- 需要主循环操作 --> RunAudioAsync(run_coroutine_threadsafe);
@@ -55,14 +58,16 @@ graph TD
     end
 
 
-    subgraph Plugin Functions [plugins_func/functions]
+    %% --- Plugin Function Execution ---
+    subgraph PluginFunctions ["Plugin Functions (plugins_func/functions/*)"]
         direction LR
-        PluginAsync[Async Plugin Functions]
+        PluginAsync["Async Plugin Functions (e.g., *_async)"]
         PluginSync["Sync Plugin Functions (run in Executor)"]
         PluginAsync -- 可能调用 --> RunPluginAsync(run_coroutine_threadsafe);
     end
 
-    subgraph Event Loop Interactions
+    %% --- Interactions with the Main Event Loop ---
+    subgraph EventLoopInteractions ["Event Loop Interactions (asyncio)"]
         direction TB
         RunTTSAsync --> B;
         RunAudioAsync --> B;
@@ -71,17 +76,16 @@ graph TD
         B -- 执行协程 --> V(WebSocket 发送/状态更新等);
     end
 
-    %% Connections within and between subgraphs
-    L --> Threading;
-    M --> Threading;
-    P --> PluginFunctions;
-    Q --> PluginFunctions;
-    R --> Threading;
+    %% --- Connections between Subgraphs/Components ---
+    L --> ThreadingAsyncExecution; %% TTS Thread start links to the threading subgraph
+    M --> ThreadingAsyncExecution; %% Audio Thread start links to the threading subgraph
+    P --> PluginFunctions;         %% Text message handling calls plugins
+    Q --> PluginFunctions;         %% Audio message handling calls plugins
+    R --> ThreadingAsyncExecution; %% Plugin execution (potentially) uses Executor
 
-
-    %% Styling (Optional)
+    %% --- Styling (Optional) ---
     classDef thread fill:#f9f,stroke:#333,stroke-width:2px;
     classDef executor fill:#ccf,stroke:#333,stroke-width:2px;
-    class L_Thread,M_Thread,TTS_Thread,Audio_Playback_Thread thread;
+    class L_Thread,M_Thread,TTSThread,AudioPlaybackThread thread;
     class Executor executor;
 ```
