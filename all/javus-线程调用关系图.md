@@ -1,98 +1,114 @@
 ```mermaid
-graph TD
-    %% --- Server Entry & Connection Setup ---
-    subgraph ServerCore ["Server Core (app.py, core/server.py)"]
-        direction LR
-        A["启动 main()"] --> B(创建主事件循环);
-        B --> C{启动 WebSocket Server};
-        C --> D[监听端口, 等待连接];
-    end
+classDiagram
+    direction LR
 
-    %% --- Single Connection Lifecycle Management ---
-    subgraph ConnectionManager ["Connection Manager (core/connection_manager.py per connection)"]
-        direction TB
-        D --> E{接受 WebSocket 连接};
-        E --> F[创建 WebSocketWrapper];
-        F --> G[注入依赖: Authenticator, Router, Dispatcher, StateManager];
-        G --> H{"调用 Authenticator.authenticate()"}
-        H -- "认证成功" --> I("加载状态 StateManager.load()")
-        I --> J(进入消息监听循环 async for);
-        J -- "收到消息" --> K{"调用 Router.route(message)"}
-        K -- "返回 Handler" --> L{"调用 Handler.handle(message, context)"}
-        L -- "正常处理" --> J
-        J -- "连接关闭/异常" --> M{"保存状态 StateManager.save()"}
-        M --> N("关闭连接 WebSocketWrapper.close()") 
-        H -- "认证失败" --> N
-    end
+    class WebSocketServer {
+        +start()
+        +handle_new_connection(websocket)
+    }
 
-    %% --- Authentication ---
-    subgraph Authenticator ["Authenticator (core/auth.py)"]
-       AuthNode["authenticate(headers)"]
-    end
+    class ConnectionManager {
+        -websocket: WebSocketWrapper
+        -authenticator: Authenticator
+        -router: MessageRouter
+        -dispatcher: TaskDispatcher
+        -state_manager: StateManager
+        +manage_connection() void
+        -receive_messages() void
+    }
 
-    %% --- Message Routing ---
-    subgraph Router ["Message Router (core/routing.py)"]
-        RouteNode["route(message) -> MessageHandler"]
-    end
+    class WebSocketWrapper {
+        -ws: WebSocketConnection
+        +send_json(data: dict) void
+        +send_text(text: str) void
+        +receive() Any
+        +close() void
+    }
 
-    %% --- Message Handling ---
-    subgraph Handlers ["Message Handlers (core/handlers/*)"]
-        direction LR
-        HandlerBase["BaseMessageHandler.handle()"]
-        TextHandler["TextMessageHandler"]
-        AudioHandler["AudioMessageHandler"]
-        %% ... other handlers ...
-        HandlerBase --> TextHandler
-        HandlerBase --> AudioHandler
-        TextHandler -- "调用插件/TTS" --> TaskDisp
-        AudioHandler -- "可能调用" --> TaskDisp
-    end
+    class Authenticator {
+        +authenticate(headers: dict) bool
+    }
 
-    %% --- Task Dispatching ---
-    subgraph TaskDispatcher ["Task Dispatcher (core/tasks.py)"]
-        TaskDisp["dispatch_plugin(tool_name, args)"]
-        TaskDisp --> PluginExecQueue("Plugin Executor")
-        TaskDisp --> TTSQueue("TTS Queue")
-        TaskDisp --> AudioQueue("Audio Playback Queue")
-    end
+    class MessageRouter {
+        +route(message: Any) BaseMessageHandler
+    }
 
-    %% --- State Management ---
-    subgraph StateManager ["State Manager (core/state.py)"]
-        LoadState["load()"]
-        SaveState["save()"]
-    end
+    class BaseMessageHandler {
+        <<Interface>>
+        +handle(message: Any, context: HandlerContext) void
+    }
 
-    %% --- Background Execution (Similar to before, but triggered differently) ---
-    subgraph BackgroundExecution ["Threading & Async Execution"]
-        direction LR
-        PluginExecQueue -- 任务 --> Executor[ThreadPoolExecutor]
-        TTSQueue -- 任务 --> TTSThread["TTS Thread"]
-        AudioQueue -- 任务 --> AudioThread["Audio Playback Thread"]
+    class TextMessageHandler {
+        +handle(message: Any, context: HandlerContext) void
+    }
 
-        Executor -- "完成/需交互" --> RunExecAsync(run_coroutine_threadsafe)
-        TTSThread -- "完成/需交互" --> RunTTSAsync(run_coroutine_threadsafe)
-        AudioThread -- "需交互" --> RunAudioAsync(run_coroutine_threadsafe)
+    class AudioMessageHandler {
+        +handle(message: Any, context: HandlerContext) void
+    }
+    %% Potentially other handlers like ControlMessageHandler
 
-        RunExecAsync --> B
-        RunTTSAsync --> B
-        RunAudioAsync --> B
-    end
+    class HandlerContext {
+        %% Object passed to handlers containing dependencies
+        +dispatcher: TaskDispatcher
+        +websocket: WebSocketWrapper
+        +state_manager: StateManager
+        %% ... other needed context ...
+    }
 
+    class TaskDispatcher {
+        -executor: ThreadPoolExecutor
+        -tts_queue: Queue
+        -audio_queue: Queue
+        -loop: AbstractEventLoop
+        +dispatch_plugin_task(func, *args) Future
+        +dispatch_tts(text: str) void
+        +dispatch_audio(audio_data: Any) void
+    }
 
-    %% --- Dependencies & Interactions ---
-    G --> Authenticator
-    G --> Router
-    G --> TaskDispatcher
-    G --> StateManager
+    class StateManager {
+        +load(connection_id: str) State
+        +save(connection_id: str, state: State) void
+    }
 
-    K --> Router
-    L --> Handlers
+    class TTSThread {
+        -tts_queue: Queue
+        -loop: AbstractEventLoop
+        +run() void
+        -process_tts_task(text) void
+    }
 
-    %% Styling (Optional)
-    classDef component fill:#cff,stroke:#333,stroke-width:1px;
-    classDef thread fill:#f9f,stroke:#333,stroke-width:1px;
-    classDef queue fill:#ffc,stroke:#333,stroke-width:1px;
-    class ConnectionManager,Authenticator,Router,Handlers,TaskDispatcher,StateManager component;
-    class TTSThread,AudioThread thread;
-    class PluginExecQueue,TTSQueue,AudioQueue queue;
+    class AudioPlaybackThread {
+        -audio_queue: Queue
+        -loop: AbstractEventLoop
+        +run() void
+        -process_audio_task(audio_data) void
+    }
+
+    WebSocketServer --> ConnectionManager : creates
+    ConnectionManager o-- WebSocketWrapper : uses
+    ConnectionManager o-- Authenticator : uses
+    ConnectionManager o-- MessageRouter : uses
+    ConnectionManager o-- TaskDispatcher : uses (via context)
+    ConnectionManager o-- StateManager : uses
+
+    ConnectionManager ..> BaseMessageHandler : receives from Router
+    MessageRouter ..> BaseMessageHandler : returns
+
+    BaseMessageHandler <|-- TextMessageHandler : implements
+    BaseMessageHandler <|-- AudioMessageHandler : implements
+
+    TextMessageHandler ..> HandlerContext : uses
+    AudioMessageHandler ..> HandlerContext : uses
+    TextMessageHandler ..> TaskDispatcher : uses (via context)
+    AudioMessageHandler ..> TaskDispatcher : uses (via context)
+
+    TaskDispatcher ..> TTSThread : puts on queue
+    TaskDispatcher ..> AudioPlaybackThread : puts on queue
+    TaskDispatcher ..> ThreadPoolExecutor : submits task
+
+    %% Conceptual representation of async interaction
+    TTSThread ..> asyncio : run_coroutine_threadsafe
+    AudioPlaybackThread ..> asyncio : run_coroutine_threadsafe
+    ThreadPoolExecutor ..> asyncio : run_coroutine_threadsafe
+
 ```
